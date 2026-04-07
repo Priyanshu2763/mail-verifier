@@ -89,7 +89,7 @@ async function checkSmtp(email, mxHost) {
             stage = 'EHLO';
             send('EHLO mail-validator.local');
           } else {
-            finish({ checked: true, exists: null, verdict: 'UNVERIFIABLE', reason: `Unexpected banner: ${line}` });
+            finish({ checked: true, exists: null, catchAll: false, verdict: 'UNVERIFIABLE', reason: `Unexpected banner: ${line}` });
           }
           break;
 
@@ -98,32 +98,51 @@ async function checkSmtp(email, mxHost) {
             stage = 'MAIL_FROM';
             send('MAIL FROM:<validator@mail-validator.local>');
           } else {
-            finish({ checked: true, exists: null, verdict: 'UNVERIFIABLE', reason: `EHLO rejected: ${line}` });
+            finish({ checked: true, exists: null, catchAll: false, verdict: 'UNVERIFIABLE', reason: `EHLO rejected: ${line}` });
           }
           break;
 
         case 'MAIL_FROM':
           if (code === '250') {
-            stage = 'RCPT_TO';
+            stage = 'RCPT_TO_REAL';
             send(`RCPT TO:<${email}>`);
           } else {
-            finish({ checked: true, exists: null, verdict: 'UNVERIFIABLE', reason: `MAIL FROM rejected: ${line}` });
+            finish({ checked: true, exists: null, catchAll: false, verdict: 'UNVERIFIABLE', reason: `MAIL FROM rejected: ${line}` });
           }
           break;
 
-        case 'RCPT_TO':
+        case 'RCPT_TO_REAL':
+          if (SMTP_VALID_CODES.has(code)) {
+            // Real email accepted. But is it a catch-all? Let's check a fake address on the same connection.
+            const domain = email.slice(email.lastIndexOf('@') + 1);
+            const fakeEmail = `fake_test_123xyz_${Date.now()}@${domain}`;
+            stage = 'RCPT_TO_FAKE';
+            send(`RCPT TO:<${fakeEmail}>`);
+            socket.realEmailResponse = code + ': ' + line;
+          } else if (SMTP_INVALID_CODES.has(code)) {
+            stage = 'QUIT';
+            send('QUIT');
+            finish({ checked: true, exists: false, catchAll: false, verdict: 'REJECTED', reason: `Server responded ${code}: ${line}` });
+          } else if (SMTP_UNVERIFIABLE_CODES.has(code)) {
+            stage = 'QUIT';
+            send('QUIT');
+            finish({ checked: true, exists: null, catchAll: false, verdict: 'GREYLISTED', reason: `Greylisted or temp error: ${line}` });
+          } else {
+            stage = 'QUIT';
+            send('QUIT');
+            finish({ checked: true, exists: null, catchAll: false, verdict: 'UNVERIFIABLE', reason: `Ambiguous response ${code}: ${line}` });
+          }
+          break;
+
+        case 'RCPT_TO_FAKE':
           stage = 'QUIT';
           send('QUIT');
-
           if (SMTP_VALID_CODES.has(code)) {
-            finish({ checked: true, exists: true, verdict: 'ACCEPTED', reason: `Server responded ${code}: ${line}` });
-          } else if (SMTP_INVALID_CODES.has(code)) {
-            finish({ checked: true, exists: false, verdict: 'REJECTED', reason: `Server responded ${code}: ${line}` });
-          } else if (SMTP_UNVERIFIABLE_CODES.has(code)) {
-            finish({ checked: true, exists: null, verdict: 'UNVERIFIABLE', reason: `Greylisted or temp error: ${line}` });
+            // Fake email was ALSO accepted -> Catch-all!
+            finish({ checked: true, exists: null, catchAll: true, verdict: 'CATCH_ALL', reason: 'Domain is a catch-all (always returns OK)' });
           } else {
-            // Many servers return 252 (cannot verify but will try) — treat as unverifiable
-            finish({ checked: true, exists: null, verdict: 'UNVERIFIABLE', reason: `Ambiguous response ${code}: ${line}` });
+            // Fake email was rejected, meaning the real email's acceptance was genuine!
+            finish({ checked: true, exists: true, catchAll: false, verdict: 'ACCEPTED', reason: `Server responded ${socket.realEmailResponse}` });
           }
           break;
 

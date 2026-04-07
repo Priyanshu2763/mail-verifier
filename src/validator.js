@@ -4,6 +4,7 @@ const { validateSyntax } = require('./validators/syntax');
 const { checkDisposable } = require('./validators/disposable');
 const { checkDns } = require('./validators/dns');
 const { checkSmtp } = require('./validators/smtp');
+const { checkMicrosoft } = require('./validators/microsoft');
 const cache = require('./cache');
 
 /**
@@ -15,7 +16,11 @@ function computeScore(layers) {
   if (layers.disposable && !layers.disposable.isDisposable) score += 15;
   if (layers.dns?.hasMx) score += 35;
   if (layers.dns?.portOpen === true) score += 10;
-  if (layers.smtp?.exists === true) score += 15;
+  
+  if (layers.microsoft?.exists === true) score += 15;
+  else if (layers.smtp?.exists === true) score += 15;
+  else if (layers.smtp?.catchAll === true) score += 5; // give a little for catchall
+  
   return Math.min(score, 100);
 }
 
@@ -26,9 +31,19 @@ function computeVerdict(layers, score) {
   if (!layers.syntax?.valid) return 'INVALID';
   if (layers.disposable?.isDisposable) return 'DISPOSABLE';
   if (!layers.dns?.hasMx) return 'NO_MX';
+  
+  // Microsoft API verdict
+  if (layers.microsoft?.exists === false) return 'INVALID';
+  if (layers.microsoft?.exists === true) return 'VALID';
+
+  // SMTP verdict
   if (layers.smtp?.exists === false) return 'INVALID';
+  if (layers.smtp?.catchAll === true) return 'UNVERIFIABLE'; // Explicitly mark catch-alls as unverifiable
   if (layers.smtp?.exists === true) return 'VALID';
+  if (layers.smtp?.verdict === 'GREYLISTED') return 'RISKY';
+  
   if (layers.dns?.portOpen === false) return 'UNVERIFIABLE';
+  
   // MX exists, port open (or unknown), SMTP not run → likely valid
   if (score >= 75) return 'VALID';
   if (score >= 50) return 'RISKY';
@@ -85,10 +100,26 @@ async function validate(email) {
     return { ...result, cached: false };
   }
 
-  // ── Layer 4: SMTP (optional) ──────────────────────────────────
-  const primaryMx = dnsResult.mxRecords[0]?.host;
-  const smtpResult = await checkSmtp(email, primaryMx);
-  layers.smtp = smtpResult;
+  // ── Layer 3.5: Microsoft API ──────────────────────────────────
+  const msResult = await checkMicrosoft(email);
+  layers.microsoft = msResult;
+
+  if (msResult.isMicrosoft && msResult.exists !== null) {
+    // We got a definitive answer from Microsoft API, skip SMTP
+    layers.smtp = null;
+  } else {
+    // ── Layer 4: SMTP (optional) ──────────────────────────────────
+    const primaryMx = dnsResult.mxRecords[0]?.host;
+    let smtpResult = await checkSmtp(email, primaryMx);
+    
+    // Basic greylist retry logic (wait 2.5s and retry once)
+    if (smtpResult.verdict === 'GREYLISTED') {
+      await new Promise(r => setTimeout(r, 2500));
+      smtpResult = await checkSmtp(email, primaryMx);
+    }
+    
+    layers.smtp = smtpResult;
+  }
 
   // ── Final scoring & verdict ───────────────────────────────────
   const score = computeScore(layers);
@@ -110,6 +141,7 @@ function buildResult(email, valid, score, verdict, details, startTime) {
       syntax: details.syntax || null,
       disposable: details.disposable || null,
       dns: details.dns || null,
+      microsoft: details.microsoft || null,
       smtp: details.smtp || null,
     },
     duration_ms: Date.now() - startTime,

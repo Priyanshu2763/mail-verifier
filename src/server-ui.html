@@ -351,6 +351,14 @@
         detail: det.dns.hasMx ? `MX: ${mx} | Port 25: ${det.dns.portOpen === true ? 'open' : det.dns.portOpen === false ? 'blocked' : 'unknown'}` : (det.dns.reason || 'No MX records'),
       });
     }
+    if (det.microsoft && det.microsoft.isMicrosoft) {
+      const msIcon = det.microsoft.exists === true ? '✅' : det.microsoft.exists === false ? '❌' : '⚠️';
+      layers.push({
+        icon: msIcon,
+        title: 'Microsoft Direct Verification',
+        detail: det.microsoft.reason || 'API checked',
+      });
+    }
     if (det.smtp) {
       const smtpIcon = det.smtp.exists === true ? '✅' : det.smtp.exists === false ? '❌' : '⚠️';
       layers.push({
