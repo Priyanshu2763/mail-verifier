@@ -1,0 +1,22 @@
+{
+  "name": "email-validator",
+  "version": "1.0.0",
+  "description": "Production-ready, zero-cost email existence validator with syntax, disposable domain, DNS/MX, and optional SMTP checks",
+  "main": "src/validator.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "cli": "node src/cli.js",
+    "test": "bash tests/run-tests.sh"
+  },
+  "keywords": ["email", "validation", "validator", "mx", "dns", "smtp"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-cache": "^5.1.2",
+    "validator": "^13.12.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

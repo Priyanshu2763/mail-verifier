@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Validator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #161b25;
+      --surface2: #1c2333;
+      --border: #2a3347;
+      --accent: #6366f1;
+      --accent-glow: rgba(99,102,241,0.25);
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --purple: #a78bfa;
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --radius: 12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px 80px;
+    }
+
+    /* Header */
+    header { text-align: center; margin-bottom: 48px; }
+    header h1 {
+      font-size: 2.4rem; font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #a78bfa, #38bdf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; letter-spacing: -0.5px;
+    }
+    header p { color: var(--text-muted); margin-top: 8px; font-size: 0.95rem; }
+
+    /* Badge */
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 100px; padding: 4px 14px; font-size: 0.78rem;
+      color: #a5b4fc; margin-top: 12px; font-weight: 500;
+    }
+    .badge::before { content: '●'; color: #22c55e; font-size: 0.6rem; }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      width: 100%; max-width: 620px;
+      margin-bottom: 20px;
+    }
+
+    /* Input Area */
+    .input-row { display: flex; gap: 10px; }
+    input[type="email"] {
+      flex: 1; padding: 13px 18px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.95rem;
+      font-family: 'JetBrains Mono', monospace; outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="email"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+    input[type="email"]::placeholder { color: var(--text-muted); }
+
+    button {
+      padding: 13px 24px; border-radius: 8px; border: none; cursor: pointer;
+      font-weight: 600; font-size: 0.9rem; font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+    }
+    #validateBtn {
+      background: var(--accent); color: white;
+      box-shadow: 0 0 18px var(--accent-glow);
+    }
+    #validateBtn:hover { transform: translateY(-1px); box-shadow: 0 0 28px var(--accent-glow); }
+    #validateBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Loading */
+    .spinner {
+      display: none; width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: white; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Result Card */
+    #result { display: none; }
+    .verdict-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-radius: 8px; margin-bottom: 20px;
+    }
+    .verdict-banner .label { font-size: 0.78rem; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }
+    .verdict-banner .value { font-size: 1.5rem; font-weight: 700; }
+    .verdict-banner .score { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; opacity: 0.85; }
+
+    .v-VALID    { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
+    .v-INVALID  { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); }
+    .v-DISPOSABLE { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); }
+    .v-NO_MX    { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); }
+    .v-UNVERIFIABLE { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); }
+    .v-RISKY    { background: rgba(167,139,250,0.12); border: 1px solid rgba(167,139,250,0.3); }
+
+    .color-VALID { color: var(--green); }
+    .color-INVALID { color: var(--red); }
+    .color-DISPOSABLE { color: var(--yellow); }
+    .color-NO_MX { color: var(--red); }
+    .color-UNVERIFIABLE { color: var(--yellow); }
+    .color-RISKY { color: var(--purple); }
+
+    /* Score bar */
+    .score-bar-wrap { margin-bottom: 20px; }
+    .score-bar-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; }
+    .score-bar-track { height: 8px; background: var(--surface2); border-radius: 100px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 100px; transition: width 0.8s ease; }
+
+    /* Layer checklist */
+    .layers { display: flex; flex-direction: column; gap: 10px; }
+    .layer {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 16px; border-radius: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+    }
+    .layer-icon { font-size: 1.1rem; margin-top: 1px; flex-shrink: 0; }
+    .layer-body { flex: 1; }
+    .layer-title { font-weight: 600; font-size: 0.9rem; }
+    .layer-detail { font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; font-family: 'JetBrains Mono', monospace; word-break: break-all; }
+
+    /* Meta footer */
+    .meta-row { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+    .meta-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 12px; font-size: 0.78rem; color: var(--text-muted);
+    }
+    .meta-chip span { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+
+    /* Bulk tab */
+    .tabs { display: flex; gap: 2px; margin-bottom: 20px; background: var(--surface2); border-radius: 8px; padding: 4px; }
+    .tab-btn {
+      flex: 1; padding: 9px; background: transparent; color: var(--text-muted);
+      border-radius: 6px; font-size: 0.88rem; font-weight: 500;
+    }
+    .tab-btn.active { background: var(--surface); color: var(--text); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    textarea {
+      width: 100%; min-height: 120px; padding: 13px 16px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem; outline: none; resize: vertical; margin-bottom: 12px;
+    }
+    textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+    /* Bulk results table */
+    .bulk-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 14px; }
+    .bulk-table th {
+      text-align: left; padding: 8px 12px; color: var(--text-muted);
+      border-bottom: 1px solid var(--border); font-weight: 500; font-size: 0.75rem; text-transform: uppercase;
+    }
+    .bulk-table td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; }
+    .bulk-table tr:last-child td { border-bottom: none; }
+
+    /* Error */
+    .error-msg { color: var(--red); font-size: 0.85rem; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📧 Email Validator</h1>
+  <p>Production-grade, zero-cost email existence validation</p>
+  <div class="badge">4-Layer Pipeline · DNS/MX · SMTP Probe · Instant Cache</div>
+</header>
+
+<div class="card">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('single', this)">Single</button>
+    <button class="tab-btn" onclick="switchTab('bulk', this)">Bulk</button>
+  </div>
+
+  <!-- Single -->
+  <div id="tab-single" class="tab-content active">
+    <div class="input-row">
+      <input type="email" id="emailInput" placeholder="user@example.com" autocomplete="off" />
+      <button id="validateBtn" onclick="validateSingle()">
+        <div class="spinner" id="spinner"></div>
+        <span id="btnText">Validate</span>
+      </button>
+    </div>
+    <div id="errMsg" class="error-msg"></div>
+  </div>
+
+  <!-- Bulk -->
+  <div id="tab-bulk" class="tab-content">
+    <textarea id="bulkInput" placeholder="Enter one email per line:&#10;user@gmail.com&#10;test@yahoo.com&#10;fake@notexists.xyz"></textarea>
+    <button id="bulkBtn" onclick="validateBulk()" style="width:100%; background:var(--accent); color:white; box-shadow:0 0 18px var(--accent-glow);">
+      <div class="spinner" id="bulkSpinner" style="display:inline-block"></div>
+      <span id="bulkBtnText">Validate All</span>
+    </button>
+    <div id="bulkErrMsg" class="error-msg"></div>
+    <div id="bulkResults"></div>
+  </div>
+</div>
+
+<!-- Result -->
+<div class="card" id="result">
+  <div class="verdict-banner" id="verdictBanner">
+    <div>
+      <div class="label">Verdict</div>
+      <div class="value" id="verdictText">—</div>
+    </div>
+    <div class="score" id="scoreChip">Score: —</div>
+  </div>
+  <div class="score-bar-wrap">
+    <div class="score-bar-label"><span>Confidence Score</span><span id="scoreLabel">—</span></div>
+    <div class="score-bar-track"><div class="score-bar-fill" id="scoreBarFill" style="width:0%"></div></div>
+  </div>
+  <div class="layers" id="layersContainer"></div>
+  <div class="meta-row" id="metaRow"></div>
+</div>
+
+<script>
+  const API = '';  // Same origin
+
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('result').style.display = 'none';
+  }
+
+  document.getElementById('emailInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') validateSingle();
+  });
+
+  async function validateSingle() {
+    const email = document.getElementById('emailInput').value.trim();
+    const errEl = document.getElementById('errMsg');
+    errEl.textContent = '';
+    if (!email) { errEl.textContent = 'Please enter an email address.'; return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/validate?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Validation error'; return; }
+      renderResult(data);
+    } catch (e) {
+      errEl.textContent = 'Could not reach the API. Is the server running?';
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function validateBulk() {
+    const raw = document.getElementById('bulkInput').value.trim();
+    const errEl = document.getElementById('bulkErrMsg');
+    errEl.textContent = '';
+    if (!raw) { errEl.textContent = 'Enter at least one email.'; return; }
+
+    const emails = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    if (emails.length > 50) { errEl.textContent = 'Maximum 50 emails per request.'; return; }
+
+    setBulkLoading(true);
+    try {
+      const res = await fetch(`${API}/validate/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Bulk validation error'; return; }
+      renderBulkResults(data.results);
+    } catch (e) {
+      errEl.textContent = 'Could not reach the API. Is the server running?';
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  function setLoading(on) {
+    document.getElementById('validateBtn').disabled = on;
+    document.getElementById('spinner').style.display = on ? 'inline-block' : 'none';
+    document.getElementById('btnText').textContent = on ? 'Checking...' : 'Validate';
+  }
+
+  function setBulkLoading(on) {
+    document.getElementById('bulkBtn').disabled = on;
+    document.getElementById('bulkSpinner').style.display = on ? 'inline-block' : 'none';
+    document.getElementById('bulkBtnText').textContent = on ? 'Checking...' : 'Validate All';
+  }
+
+  const VERDICT_ICONS = { VALID: '✅', INVALID: '❌', DISPOSABLE: '🗑️', NO_MX: '❌', UNVERIFIABLE: '⚠️', RISKY: '⚠️' };
+
+  function renderResult(d) {
+    const el = document.getElementById('result');
+    el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const banner = document.getElementById('verdictBanner');
+    banner.className = `verdict-banner v-${d.verdict}`;
+
+    document.getElementById('verdictText').innerHTML =
+      `<span class="color-${d.verdict}">${VERDICT_ICONS[d.verdict] || '•'} ${d.verdict}</span>`;
+    document.getElementById('scoreChip').textContent = `Score: ${d.score}/100`;
+
+    const scoreColor = d.score >= 75 ? '#22c55e' : d.score >= 50 ? '#f59e0b' : '#ef4444';
+    document.getElementById('scoreBarFill').style.cssText = `width:${d.score}%; background:linear-gradient(90deg, ${scoreColor}88, ${scoreColor});`;
+    document.getElementById('scoreLabel').textContent = `${d.score}/100`;
+
+    // Layers
+    const layers = [];
+    const det = d.details;
+
+    if (det.syntax) {
+      layers.push({
+        icon: det.syntax.valid ? '✅' : '❌',
+        title: 'Syntax Check',
+        detail: det.syntax.valid
+          ? `Valid format${det.syntax.isRole ? ' (role-based address)' : ''}`
+          : det.syntax.reason,
+      });
+    }
+    if (det.disposable) {
+      layers.push({
+        icon: det.disposable.isDisposable ? '🗑️' : '✅',
+        title: 'Disposable Domain',
+        detail: det.disposable.isDisposable ? `Known disposable: ${det.disposable.domain}` : 'Not a disposable domain',
+      });
+    }
+    if (det.dns) {
+      const mx = det.dns.mxRecords?.map(r => r.host).join(', ') || '—';
+      layers.push({
+        icon: det.dns.hasMx ? '✅' : '❌',
+        title: 'DNS / MX Records',
+        detail: det.dns.hasMx ? `MX: ${mx} | Port 25: ${det.dns.portOpen === true ? 'open' : det.dns.portOpen === false ? 'blocked' : 'unknown'}` : (det.dns.reason || 'No MX records'),
+      });
+    }
+    if (det.smtp) {
+      const smtpIcon = det.smtp.exists === true ? '✅' : det.smtp.exists === false ? '❌' : '⚠️';
+      layers.push({
+        icon: smtpIcon,
+        title: 'SMTP Probe',
+        detail: `${det.smtp.verdict} — ${det.smtp.reason}`,
+      });
+    }
+
+    document.getElementById('layersContainer').innerHTML = layers.map(l => `
+      <div class="layer">
+        <div class="layer-icon">${l.icon}</div>
+        <div class="layer-body">
+          <div class="layer-title">${l.title}</div>
+          <div class="layer-detail">${l.detail}</div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('metaRow').innerHTML = `
+      <div class="meta-chip">⏱ <span>${d.duration_ms}ms</span></div>
+      <div class="meta-chip">💾 Cached: <span>${d.cached ? 'Yes' : 'No'}</span></div>
+      <div class="meta-chip">📧 <span>${d.email}</span></div>
+    `;
+  }
+
+  function renderBulkResults(results) {
+    const icons = { VALID: '✅', INVALID: '❌', DISPOSABLE: '🗑️', NO_MX: '❌', UNVERIFIABLE: '⚠️', RISKY: '⚠️' };
+    const html = `
+      <table class="bulk-table">
+        <tr><th>Email</th><th>Verdict</th><th>Score</th><th>Time</th></tr>
+        ${results.map(r => `
+          <tr>
+            <td>${r.email}</td>
+            <td><span class="color-${r.verdict}">${icons[r.verdict] || ''} ${r.verdict}</span></td>
+            <td>${r.score}/100</td>
+            <td>${r.duration_ms}ms</td>
+          </tr>
+        `).join('')}
+      </table>
+    `;
+    document.getElementById('bulkResults').innerHTML = html;
+  }
+</script>
+</body>
+</html>
