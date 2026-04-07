@@ -34,14 +34,22 @@ function checkMicrosoft(email) {
       res.on('end', () => {
         try {
           const json = JSON.parse(body);
-          // IfExistsResult: 0 (Personal exists), 5 (Work/School exists), 6 (Both exist), 1 (Does not exist)
+          // 0 (Personal exists), 5 (Work/School exists), 6 (Both exist)
           const validCodes = new Set([0, 5, 6]);
-          const exists = validCodes.has(json.IfExistsResult);
+          
+          let exists = null;
+          if (validCodes.has(json.IfExistsResult)) {
+            exists = true;
+          } 
+          // CRITICAL: If json.IfExistsResult === 1 (Does not exist), 
+          // we set exists = null. Why? Microsoft strictly rate-limits datacenter/VPS IPs 
+          // and silently returns "1" for ALL requests to prevent email harvesting.
+          // Therefore, we cannot trust "1" from a server context. We must fall back to SMTP.
           
           resolve({ 
             isMicrosoft: true, 
             exists, 
-            reason: `Microsoft API returned IfExistsResult: ${json.IfExistsResult}` 
+            reason: `Microsoft API returned IfExistsResult: ${json.IfExistsResult}${exists === null ? ' (Untrusted from server IP)' : ''}` 
           });
         } catch (e) {
           resolve({ isMicrosoft: true, exists: null, reason: 'Failed to parse Microsoft API response' });
